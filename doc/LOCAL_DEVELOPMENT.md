@@ -31,22 +31,33 @@ pnpm install
 Para el desarrollo local, utilizaremos el mismo proyecto Supabase que se usa en producción:
 
 1. Solicita acceso al proyecto Supabase existente al administrador del sistema
-2. Obtén la URL del proyecto y la clave anónima (anon key) que se encuentran en el archivo `.env.production` en la raíz del proyecto
+2. Obtén la URL del proyecto y la clave anónima (anon key) para configurar tus variables de entorno
 
 > **Nota importante**: No es necesario crear un nuevo proyecto Supabase ni ejecutar los scripts SQL, ya que utilizaremos la misma instancia de Supabase que está en producción.
 
-### 4. Utilizar Variables de Entorno Existentes
+### 4. Configuración de Auth en Supabase
 
-Para el desarrollo local, utilizaremos las mismas variables de entorno que se usan en producción:
+Para que la autenticación funcione correctamente en desarrollo local, asegúrate de que en Supabase → Authentication → URL Configuration estén configurados los siguientes valores:
 
-1. Verifica que el archivo `.env.production` existe en la raíz del proyecto
-2. Este archivo ya contiene las variables necesarias para conectarse al proyecto Supabase:
-   ```
-   VITE_SUPABASE_URL=https://cvkooqqlxlttoplkxgla.supabase.co
-   VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-   ```
+- **Site URL**: http://localhost:3000
+- **Redirect URLs**: http://localhost:3000 (y cualquier callback que use la app)
+- **Allowed origins (CORS)**: http://localhost:3000
 
-> **Nota importante**: No es necesario crear un archivo `.env.local` adicional, ya que utilizaremos las mismas variables de entorno que están en producción.
+> **Nota**: Esta configuración ya debería estar realizada por el administrador del sistema. Si tienes problemas con la autenticación, verifica estos valores.
+
+### 5. Configurar Variables de Entorno
+
+Para el desarrollo local, necesitas crear un archivo `.env.local` en la raíz del proyecto con las siguientes variables:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=https://<project-id>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
+# server-only opcional (NO usar en el cliente)
+SUPABASE_SERVICE_ROLE=<service-role>
+APP_BASE_URL=http://localhost:3000
+```
+
+> **Nota importante**: Como estamos usando credenciales de producción, recuerda que las pruebas en local tocan datos reales. Usa usuarios de prueba o emails con alias +test para evitar afectar datos de producción.
 
 ## Ejecutar la Aplicación
 

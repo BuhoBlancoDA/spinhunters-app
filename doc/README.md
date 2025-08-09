@@ -68,9 +68,17 @@ These policies ensure that users can only access, modify, or delete their own da
 
 ## Current Implementation
 
-The current implementation uses policies that allow authenticated users to perform all operations on the users and memberships tables. This is suitable for the current stage of development but should be reviewed and tightened before deploying to production.
+The current implementation uses restrictive policies that follow the principle of least privilege:
 
-The SQL migration file `supabase/migrations/20240619_rls_memberships_users.sql` contains the current RLS policies.
+1. Users can only read and update their own data in the `users` table, and can only insert their own profile with `id = auth.uid()`.
+2. Users can only read their own memberships in the `memberships` table.
+3. Only administrators (determined by the `admin_users` table and `is_admin()` function) can create, update, or delete memberships.
+4. All authenticated users can read payment methods, but only administrators can create, update, or delete them.
+5. Users can only read their own ledger entries, and only administrators can create, update, or delete ledger entries.
+
+These policies ensure that users can only access their own data and cannot perform operations that should be restricted to administrators.
+
+The SQL migration file `supabase/sql/03_schema_alignment.sql` contains the current RLS policies.
 
 ## Best Practices
 

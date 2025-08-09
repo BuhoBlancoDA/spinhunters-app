@@ -28,7 +28,13 @@ Antes de comenzar, asegúrate de tener:
 2. Verifica que las tablas y políticas descritas en `DATABASE.md` existen y están configuradas correctamente
 3. Si es necesario aplicar cambios al esquema, coordina con el equipo para ejecutar los scripts SQL en el siguiente orden:
    - `supabase/sql/01_initial_schema.sql` (solo para nuevas instalaciones)
-   - `supabase/sql/02_rls_policies.sql` (solo para nuevas instalaciones o actualizaciones de políticas)
+   - `supabase/sql/04_pos_compatibility.sql` (para compatibilidad con el POS)
+   - `supabase/sql/05_rls_secure.sql` (para políticas de seguridad)
+   - `supabase/sql/05_seed_admins.sql` (para configurar usuarios administradores)
+
+4. Antes de ejecutar los scripts, verifica:
+   - Duplicados en payment_methods (resolver antes de aplicar UNIQUE constraint)
+   - Confirmar que los UUIDs de admin en 05_seed_admins.sql existen en auth.users
 
 ### 3. Configurar Autenticación
 

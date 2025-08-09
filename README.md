@@ -119,6 +119,34 @@ Si necesitas trabajar con las Edge Functions existentes en el proyecto Supabase:
 
 > **Nota importante**: Ten cuidado al modificar o desplegar Edge Functions, ya que podrías afectar a otros proyectos que utilizan el mismo proyecto Supabase.
 
+### Checklist de Despliegue
+
+#### Preflight Manual
+
+- [ ] Verificar duplicados en payment_methods:
+  ```sql
+  SELECT lower(name) AS key, COUNT(*), array_agg(id) AS ids
+  FROM public.payment_methods
+  GROUP BY lower(name)
+  HAVING COUNT(*) > 1;
+  ```
+  Si hay duplicados, resolver antes de aplicar UNIQUE constraint.
+
+- [ ] Comprobar que los UUIDs de admin existen en auth.users:
+  ```sql
+  SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = '71eb6ed3-d5af-4ebe-9867-05dba15a9fe8');
+  SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = '9554058b-2d02-4c33-8c0a-9f778ada4963');
+  ```
+
+#### Post-Deploy
+
+- [ ] Probar lectura y edición de memberships con cuenta admin
+- [ ] Verificar que usuarios normales no pueden leer ledger
+- [ ] Activar/editar una membresía y comprobar que el trigger inserta en membership_periods:
+  ```sql
+  SELECT * FROM public.membership_periods ORDER BY created_at DESC LIMIT 5;
+  ```
+
 ## Estructura del Proyecto
 
 ```
