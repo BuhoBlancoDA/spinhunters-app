@@ -1,492 +1,282 @@
-# Database Structure and Schema
+Aquí tienes el **`DATABASE.md`** completo listo para pegar y reemplazar el archivo actual.
 
-This document provides detailed information about the database structure and schema used in the SpinHunters POS application.
+---
 
-## Table of Contents
+# Database Structure and Schema (EVA POS · SpinHunters)
 
-1. [Overview](#overview)
-2. [Tables](#tables)
-3. [Views](#views)
-4. [Relationships](#relationships)
-5. [Functions and Triggers](#functions-and-triggers)
-6. [Row Level Security (RLS) Policies](#row-level-security-rls-policies)
+Este documento refleja **la estructura real** compartida entre el POS (EVA) y la SpinHunters App. Describe tablas, vistas, funciones/triggers y un resumen de RLS tal como están hoy en Supabase.
 
-## Overview
+> Nota clave de identidad:
+>
+> * `auth.users.id` (ID de autenticación) se mapea a `public.users.auth_user_id`.
+> * El **perfil** del usuario vive en `public.users` y su PK es `public.users.id`.
+> * Las relaciones de negocio (p. ej., `memberships.user_id`) apuntan a **`public.users.id`** (no a `auth.users.id`).
 
-The SpinHunters POS application uses a PostgreSQL database hosted on Supabase. The database schema is designed to support the following core functionalities:
+---
 
-- User management
-- Membership tracking
-- Financial ledger
-- Product inventory
-- Health checks
+## Tablas
 
-## Tables
+### `public.users`
 
-### users
+Perfil del usuario (no confundir con `auth.users`).
 
-Stores information about users of the system.
+| Columna           | Tipo                               | Notas                                                      |
+| ----------------- | ---------------------------------- | ---------------------------------------------------------- |
+| id                | `uuid` `default gen_random_uuid()` | **PK** (perfil)                                            |
+| name              | `text` `not null`                  | Nombre visible                                             |
+| email             | `text` `not null`                  | Único (`users_email_key`) + índice `idx_users_email_lower` |
+| created\_at       | `timestamptz` `default now()`      |                                                            |
+| updated\_at       | `timestamptz` `default now()`      | Trigger `update_users_updated_at`                          |
+| alternate\_email  | `text`                             | Gmail (para Classroom/servicios)                           |
+| auth\_user\_id    | `uuid`                             | FK opcional → `auth.users(id)` (`users_auth_user_id_fkey`) |
+| username          | `text`                             | Único (`users_username_key`)                               |
+| discord\_nickname | `text`                             |                                                            |
+| ggpoker\_username | `text`                             |                                                            |
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | uuid | Primary key, auto-generated |
-| created_at | timestamp with time zone | Creation timestamp, auto-generated |
-| updated_at | timestamp with time zone | Last update timestamp |
-| email | text | User's email address |
-| name | text | User's full name |
-| phone | text | User's phone number |
-| address | text | User's address |
-| notes | text | Additional notes about the user |
-| auth_user_id | uuid | Bridge column that references auth.users.id (nullable) |
+**Índices y triggers**
 
-### memberships
+* `create index if not exists idx_users_email_lower on public.users (lower(email));`
+* Trigger: `update_users_updated_at` → `update_updated_at_column()`.
 
-Tracks memberships associated with users.
+---
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | uuid | Primary key, auto-generated |
-| created_at | timestamp with time zone | Creation timestamp, auto-generated |
-| updated_at | timestamp with time zone | Last update timestamp |
-| user_id | uuid | Foreign key to users.id |
-| plan | text | Membership plan type (TEXT with CHECK constraint, compatible with POS) |
-| start_date | date | Start date of the membership |
-| expires_at | date | Expiration date of the membership |
-| status | text | Current status (TEXT with CHECK constraint: 'pending', 'active', 'expired', 'cancelled') |
-| payment_method_id | uuid | Foreign key to payment_methods.id |
-| amount | numeric | Amount paid for the membership |
+### `public.memberships`
 
-### products
+Membresías administradas por el POS.
 
-Stores information about products available for sale.
+| Columna           | Tipo                                 | Notas                                                        |
+| ----------------- | ------------------------------------ | ------------------------------------------------------------ |
+| id                | `uuid` `default gen_random_uuid()`   | **PK**                                                       |
+| user\_id          | `uuid` `not null`                    | FK → `public.users(id)` (`memberships_user_id_fkey`)         |
+| plan              | `text` `not null`                    | Texto libre (no ENUM), compatible con denominaciones del POS |
+| status            | `text` `not null` `default 'active'` | CHECK en `('active','expired','cancelled')`                  |
+| start\_date       | `timestamptz` `not null`             |                                                              |
+| expires\_at       | `timestamptz` `not null`             |                                                              |
+| created\_at       | `timestamptz` `default now()`        |                                                              |
+| updated\_at       | `timestamptz` `default now()`        | Trigger `update_memberships_updated_at`                      |
+| ggpoker\_username | `text`                               |                                                              |
+| discord\_nickname | `text`                               |                                                              |
+| notes             | `text`                               |                                                              |
+| eva               | `boolean` `default false`            | Flag interno del POS                                         |
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | uuid | Primary key, auto-generated |
-| created_at | timestamp with time zone | Creation timestamp, auto-generated |
-| updated_at | timestamp with time zone | Last update timestamp |
-| name | text | Product name |
-| description | text | Product description |
-| price | numeric | Product price |
-| category | text | Product category |
-| sku | text | Stock keeping unit |
-| inventory_count | integer | Current inventory count |
-
-### payment_methods
-
-Stores available payment methods.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | uuid | Primary key, auto-generated |
-| created_at | timestamp with time zone | Creation timestamp, auto-generated |
-| name | text | Payment method name |
-| description | text | Payment method description |
-| is_active | boolean | Whether the payment method is active |
-
-### ledger
-
-Records financial transactions.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | uuid | Primary key, auto-generated |
-| created_at | timestamp with time zone | Creation timestamp, auto-generated |
-| updated_at | timestamp with time zone | Last update timestamp |
-| transaction_date | date | Date of the transaction |
-| description | text | Transaction description |
-| amount | numeric | Transaction amount |
-| type | text | Transaction type (values: 'income', 'expense', maintained for POS compatibility) |
-| category | text | Transaction category |
-| payment_method_id | uuid | Foreign key to payment_methods.id |
-| user_id | uuid | Foreign key to users.id (optional) |
-| membership_id | uuid | Foreign key to memberships.id (optional) |
-| currency | text | Currency of the transaction (default: 'EUR') |
-| payment_method_description | text | Description of the payment method |
-| product_id | uuid | Foreign key to products.id (optional) |
-| created_by | uuid | Foreign key to auth.users.id (optional) |
-| name_or_email | text | Name or email of the user related to the transaction |
-
-### health_check
-
-Simple table for checking database connectivity.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | serial | Primary key, auto-incremented |
-| ok | boolean | Always true, for connectivity checks |
-
-### admin_users
-
-Table that stores users with administrator privileges.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| user_id | uuid | Primary key, reference to auth.users.id |
-
-### membership_periods
-
-Table that stores the history of membership periods.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | uuid | Primary key, auto-generated |
-| membership_id | uuid | Foreign key to memberships.id |
-| start_date | timestamptz | Start date of the period |
-| end_date | timestamptz | End date of the period |
-| plan | text | Membership plan type |
-| created_at | timestamptz | Creation timestamp, auto-generated |
-
-## Views
-
-### memberships_view
-
-A view that joins the `memberships` and `users` tables to provide a comprehensive view of memberships with user information.
+**Índice único parcial (una activa por usuario/plan)**
 
 ```sql
-CREATE VIEW memberships_view AS
-SELECT 
-  m.id,
-  m.created_at,
-  m.updated_at,
-  m.user_id,
-  u.name as user_name,
-  u.email as user_email,
-  m.plan,
-  m.start_date,
-  m.expires_at,
-  m.status,
-  m.payment_method_id,
-  m.amount
-FROM 
-  memberships m
-JOIN 
-  users u ON m.user_id = u.id;
+create unique index if not exists uniq_active_membership
+on public.memberships(user_id, plan)
+where status = 'active';
 ```
 
-### ledger_view
+**Triggers relevantes**
 
-A view that joins the `ledger`, `users`, and `payment_methods` tables to provide a comprehensive view of financial transactions.
+* `fill_membership_from_user` (BEFORE INSERT) → `membership_defaults_from_user()`
+  Completa campos opcionales de la membresía (discord, ggpoker, etc.) desde `public.users`.
+* `update_memberships_updated_at` (BEFORE UPDATE) → `update_updated_at_column()`.
+
+---
+
+### `public.membership_periods`
+
+Historial de periodos asociados a una membresía (renovaciones, cambios de plan, etc.).
+
+| Columna        | Tipo                               | Notas                         |
+| -------------- | ---------------------------------- | ----------------------------- |
+| id             | `uuid` `default gen_random_uuid()` | **PK**                        |
+| membership\_id | `uuid` `not null`                  | FK → `public.memberships(id)` |
+| start\_date    | `timestamptz` `not null`           |                               |
+| end\_date      | `timestamptz` `not null`           |                               |
+| plan           | `text` `not null`                  |                               |
+| created\_at    | `timestamptz` `default now()`      |                               |
+
+> Nota: el POS puede usar esta tabla para auditoría/renovaciones. La app web la consulta en **solo lectura**.
+
+---
+
+### `public.payment_methods`
+
+Métodos de pago (catálogo POS).
+
+| Columna     | Tipo          | Notas        |
+| ----------- | ------------- | ------------ |
+| id          | `uuid`        | **PK**       |
+| name        | `text`        | Nombre único |
+| created\_at | `timestamptz` |              |
+| updated\_at | `timestamptz` |              |
+
+> La descripción puntual usada en un cobro vive en `ledger.payment_method_description` (no aquí).
+
+---
+
+### `public.products`
+
+Catálogo simple del POS.
+
+| Columna     | Tipo          | Notas  |
+| ----------- | ------------- | ------ |
+| id          | `uuid`        | **PK** |
+| name        | `text`        |        |
+| price       | `numeric`     |        |
+| category    | `text`        |        |
+| created\_at | `timestamptz` |        |
+| updated\_at | `timestamptz` |        |
+
+---
+
+### `public.ledger`
+
+Movimientos contables del POS. **Solo administradores** pueden ver/gestionar esta tabla (los usuarios finales **no** ven sus movimientos).
+
+| Columna                      | Tipo          | Notas                                     |
+| ---------------------------- | ------------- | ----------------------------------------- |
+| id                           | `uuid`        | **PK**                                    |
+| type                         | `text`        | `'income'` \| `'expense'` (CHECK del POS) |
+| amount                       | `numeric`     |                                           |
+| description                  | `text`        |                                           |
+| product\_id                  | `uuid`        | FK opcional → `public.products(id)`       |
+| payment\_method\_id          | `uuid`        | FK → `public.payment_methods(id)`         |
+| created\_at                  | `timestamptz` |                                           |
+| created\_by                  | `uuid`        | FK opcional → `auth.users(id)`            |
+| name\_or\_email              | `text`        |                                           |
+| currency                     | `text`        |                                           |
+| payment\_method\_description | `text`        |                                           |
+
+> Aclaración: En el esquema actual del POS **no existen** `transaction_date`, `category`, `user_id` o `membership_id` dentro de `ledger`.
+
+---
+
+### `public.health_check` (si aplica)
+
+Tabla mínima de diagnóstico.
+
+| Columna       | Tipo          | Notas           |
+| ------------- | ------------- | --------------- |
+| id            | `serial`      | **PK**          |
+| status        | `text`        | default `'ok'`  |
+| last\_checked | `timestamptz` | default `now()` |
+
+---
+
+### `public.admin_users`
+
+Usuarios administradores.
+
+| Columna  | Tipo   | Notas                     |
+| -------- | ------ | ------------------------- |
+| user\_id | `uuid` | **PK** → `auth.users(id)` |
+
+---
+
+## Vistas
+
+### `public.memberships_view`
+
+Vista de **solo lectura** para listar membresías con datos del usuario.
 
 ```sql
-CREATE VIEW ledger_view AS
-SELECT 
+create or replace view public.memberships_view as
+select
+  m.id,
+  m.user_id,
+  u.name  as user_name,
+  u.email as user_email,
+  u.alternate_email as user_alternate_email,
+  m.plan,
+  m.status,
+  m.ggpoker_username,
+  m.discord_nickname,
+  m.notes,
+  m.eva,
+  m.start_date,
+  m.expires_at,
+  m.created_at,
+  m.updated_at
+from public.memberships m
+join public.users u on u.id = m.user_id;
+```
+
+### `public.ledger_view`
+
+Vista para mostrar movimientos con nombres de producto y método de pago.
+
+```sql
+create or replace view public.ledger_view as
+select
   l.id,
   l.type,
   l.amount,
   l.description,
   l.product_id,
-  p.name AS product_name,
+  p.name as product_name,
   l.payment_method_id,
-  pm.name AS payment_method_name,
+  pm.name as payment_method_name,
   l.created_at,
   l.created_by,
   l.name_or_email,
   l.currency,
-  l.payment_method_description,
-  l.transaction_date,
-  l.category,
-  l.user_id,
-  u.name AS user_name,
-  l.membership_id
-FROM 
-  ledger l
-LEFT JOIN 
-  products p ON l.product_id = p.id
-LEFT JOIN 
-  payment_methods pm ON l.payment_method_id = pm.id
-LEFT JOIN 
-  users u ON l.user_id = u.id;
+  l.payment_method_description
+from public.ledger l
+left join public.products p on p.id = l.product_id
+left join public.payment_methods pm on pm.id = l.payment_method_id;
 ```
 
-## Relationships
+---
 
-- `memberships.user_id` → `users.id` (Many-to-One)
-- `memberships.payment_method_id` → `payment_methods.id` (Many-to-One)
-- `ledger.payment_method_id` → `payment_methods.id` (Many-to-One)
-- `ledger.user_id` → `users.id` (Many-to-One)
-- `ledger.membership_id` → `memberships.id` (Many-to-One)
-- `ledger.product_id` → `products.id` (Many-to-One)
-- `ledger.created_by` → `auth.users.id` (Many-to-One)
-- `membership_periods.membership_id` → `memberships.id` (Many-to-One)
-- `admin_users.user_id` → `auth.users.id` (One-to-One)
-- `users.auth_user_id` → `auth.users.id` (One-to-One, bridge column for linking with auth)
+## Funciones & Triggers (resumen)
 
-## Functions and Triggers
+* `update_updated_at_column()`
+  Triggers:
 
-### update_expired_memberships
+  * `update_users_updated_at` (en `users`)
+  * `update_memberships_updated_at` (en `memberships`)
+  * (Opcional) en `products`, `payment_methods`, `ledger` según tu proyecto.
 
-A function that automatically updates the status of expired memberships and returns the number of rows updated.
+* `membership_defaults_from_user()`
+  Trigger:
 
-```sql
-CREATE OR REPLACE FUNCTION update_expired_memberships()
-RETURNS INTEGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE v_count INTEGER;
-BEGIN
-  UPDATE public.memberships
-     SET status='expired'
-   WHERE status='active'
-     AND expires_at < CURRENT_DATE;
-  GET DIAGNOSTICS v_count = ROW_COUNT;
-  RETURN v_count;
-END;
-$$;
-```
+  * `fill_membership_from_user` (BEFORE INSERT en `memberships`).
+    Completa campos opcionales desde el perfil (`users`).
 
-### is_admin
+* (Opcional) `record_membership_period()` + trigger de auditoría
+  Para historizar cambios relevantes en `memberships` hacia `membership_periods`.
 
-A function that determines if the current user has administrator privileges by checking the `admin_users` table.
+> **Recomendación técnica**: dentro de funciones PL/pgSQL, **califica** siempre columnas con alias de tabla (`m.user_id`, `u.email`, etc.) para evitar ambigüedad con parámetros OUT.
 
-```sql
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT EXISTS(SELECT 1 FROM public.admin_users WHERE user_id = auth.uid());
-$$;
-```
+---
 
-### update_updated_at_column
+## RLS (resumen funcional)
 
-A function that automatically updates the `updated_at` column whenever a row is updated.
+> Las políticas se definen en `supabase/sql/05_rls_secure.sql`. Aquí va el comportamiento esperado:
 
-```sql
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-```
+* **users**
 
-Triggers for this function:
+  * `SELECT / UPDATE`: el usuario sobre su propia fila (`auth.uid() = auth_user_id`) o admin (`is_admin() = true`).
+  * `INSERT`: permitido si `auth_user_id = auth.uid()` (o admin).
 
-```sql
-CREATE TRIGGER update_users_updated_at
-BEFORE UPDATE ON users
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
+* **memberships**
 
-CREATE TRIGGER update_memberships_updated_at
-BEFORE UPDATE ON memberships
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
+  * `SELECT`: el usuario ve **solo sus** membresías (vía enlace `users.id` ↔ `memberships.user_id`), o admin.
+  * `INSERT / UPDATE / DELETE`: **solo admin** (la app web no crea ni modifica membresías).
 
-CREATE TRIGGER update_ledger_updated_at
-BEFORE UPDATE ON ledger
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
+* **membership\_periods**
 
-CREATE TRIGGER update_products_updated_at
-BEFORE UPDATE ON products
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
-```
+  * Por defecto: **solo admin** (la lectura por dueño es opcional según necesidades).
 
-### record_membership_period
+* **payment\_methods**
 
-A function and trigger that automatically records membership periods when a membership is updated.
+  * `SELECT`: cualquier autenticado.
+  * Mutaciones: **solo admin**.
 
-```sql
-CREATE OR REPLACE FUNCTION record_membership_period()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF (OLD.status = 'active' AND NEW.status != 'active') OR
-     OLD.plan != NEW.plan OR
-     OLD.start_date != NEW.start_date OR
-     OLD.expires_at != NEW.expires_at THEN
-    INSERT INTO public.membership_periods (membership_id, start_date, end_date, plan)
-    VALUES (OLD.id, OLD.start_date, OLD.expires_at, OLD.plan);
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+* **ledger**
 
-CREATE TRIGGER record_membership_period_on_update
-BEFORE UPDATE ON memberships
-FOR EACH ROW
-WHEN (OLD.status = 'active')
-EXECUTE FUNCTION record_membership_period();
-```
+  * **Todas** las operaciones: **solo admin**.
+  * Decisión de producto: los usuarios finales **no** ven movimientos contables.
 
-## Row Level Security (RLS) Policies
+---
 
-The database uses Row Level Security (RLS) to control access to data at the row level. Below are the current RLS policies:
+## Convenciones de uso en la App
 
-### users Table
+* El **callback** de autenticación (`/auth/callback`) realiza **upsert de perfil** en `public.users` (por `email`/`auth_user_id`). **No** toca `memberships`.
+* El **dashboard** consulta estado de membresía en `public.memberships_view` usando **`users.id`** (perfil), **no** `auth.users.id`.
+* La **gestión** de membresías (crear, cancelar, renovar) se hace desde el **POS** o mediante RPCs **solo-admin**.
 
-```sql
--- Users can read their own data or admins can read all
-CREATE POLICY "Users can read their own data"
-ON public.users FOR SELECT TO authenticated
-USING (auth.uid() = auth_user_id OR is_admin());
-
--- Users can update their own data or admins can update all
-CREATE POLICY "Users can update their own data"
-ON public.users FOR UPDATE TO authenticated
-USING (auth.uid() = auth_user_id OR is_admin())
-WITH CHECK (auth.uid() = auth_user_id OR is_admin());
-
--- Users can insert their own profile
-CREATE POLICY "Users can insert their own profile"
-ON public.users FOR INSERT TO authenticated
-WITH CHECK (auth_user_id = auth.uid());
-```
-
-### memberships Table
-
-```sql
--- Users can read their own memberships or admins can read all
-CREATE POLICY "Users can read their own memberships"
-ON public.memberships FOR SELECT TO authenticated
-USING (
-  is_admin() OR
-  auth.uid() = (
-    SELECT u.auth_user_id FROM public.users u WHERE u.id = user_id
-  )
-);
-
--- Only admins can create memberships
-CREATE POLICY "Only admins can create memberships"
-ON public.memberships FOR INSERT TO authenticated
-WITH CHECK (is_admin());
-
--- Only admins can update memberships
-CREATE POLICY "Only admins can update memberships"
-ON public.memberships FOR UPDATE TO authenticated
-USING (is_admin())
-WITH CHECK (is_admin());
-
--- Only admins can delete memberships
-CREATE POLICY "Only admins can delete memberships"
-ON public.memberships FOR DELETE TO authenticated
-USING (is_admin());
-```
-
-### payment_methods Table
-
-```sql
--- All authenticated users can read payment methods
-CREATE POLICY "All authenticated users can read payment methods"
-ON public.payment_methods FOR SELECT TO authenticated
-USING (true);
-
--- Only admins can create payment methods
-CREATE POLICY "Only admins can create payment methods"
-ON public.payment_methods FOR INSERT TO authenticated
-WITH CHECK (is_admin());
-
--- Only admins can update payment methods
-CREATE POLICY "Only admins can update payment methods"
-ON public.payment_methods FOR UPDATE TO authenticated
-USING (is_admin())
-WITH CHECK (is_admin());
-
--- Only admins can delete payment methods
-CREATE POLICY "Only admins can delete payment methods"
-ON public.payment_methods FOR DELETE TO authenticated
-USING (is_admin());
-```
-
-### ledger Table
-
-```sql
--- Users can read their own ledger entries or admins can read all
-CREATE POLICY "Users can read their own ledger entries"
-ON public.ledger FOR SELECT TO authenticated
-USING (auth.uid() = user_id OR is_admin());
-
--- Only admins can create ledger entries
-CREATE POLICY "Only admins can create ledger entries"
-ON public.ledger FOR INSERT TO authenticated
-WITH CHECK (is_admin());
-
--- Only admins can update ledger entries
-CREATE POLICY "Only admins can update ledger entries"
-ON public.ledger FOR UPDATE TO authenticated
-USING (is_admin())
-WITH CHECK (is_admin());
-
--- Only admins can delete ledger entries
-CREATE POLICY "Only admins can delete ledger entries"
-ON public.ledger FOR DELETE TO authenticated
-USING (is_admin());
-```
-
-### health_check Table
-
-```sql
--- All authenticated users can read health check
-CREATE POLICY "All authenticated users can read health check"
-ON public.health_check FOR SELECT TO authenticated
-USING (true);
-
--- Only admins can update health check
-CREATE POLICY "Only admins can update health check"
-ON public.health_check FOR UPDATE TO authenticated
-USING (is_admin())
-WITH CHECK (is_admin());
-```
-
-### products Table
-
-```sql
--- All authenticated users can read products
-CREATE POLICY "All authenticated users can read products"
-ON public.products FOR SELECT TO authenticated
-USING (true);
-
--- Only admins can create products
-CREATE POLICY "Only admins can create products"
-ON public.products FOR INSERT TO authenticated
-WITH CHECK (is_admin());
-
--- Only admins can update products
-CREATE POLICY "Only admins can update products"
-ON public.products FOR UPDATE TO authenticated
-USING (is_admin())
-WITH CHECK (is_admin());
-
--- Only admins can delete products
-CREATE POLICY "Only admins can delete products"
-ON public.products FOR DELETE TO authenticated
-USING (is_admin());
-```
-
-### membership_periods Table
-
-```sql
--- Users can read their own membership periods or admins can read all
-CREATE POLICY "Users can read their own membership periods"
-ON public.membership_periods FOR SELECT TO authenticated
-USING (
-  EXISTS (
-    SELECT 1 FROM public.memberships m
-    WHERE m.id = membership_id AND (auth.uid() = m.user_id OR is_admin())
-  )
-);
-
--- Only admins can create membership periods
-CREATE POLICY "Only admins can create membership periods"
-ON public.membership_periods FOR INSERT TO authenticated
-WITH CHECK (is_admin());
-
--- Only admins can update membership periods
-CREATE POLICY "Only admins can update membership periods"
-ON public.membership_periods FOR UPDATE TO authenticated
-USING (is_admin())
-WITH CHECK (is_admin());
-
--- Only admins can delete membership periods
-CREATE POLICY "Only admins can delete membership periods"
-ON public.membership_periods FOR DELETE TO authenticated
-USING (is_admin());
-```
+---

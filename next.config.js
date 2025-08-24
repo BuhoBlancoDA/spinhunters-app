@@ -1,12 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    serverActions: true,
-  },
-  images: {
-    domains: ['localhost'],
-  },
+  // Server Actions ya están habilitadas por defecto en Next 14+
 }
-
 module.exports = nextConfig

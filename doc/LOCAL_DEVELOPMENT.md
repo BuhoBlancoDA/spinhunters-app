@@ -1,219 +1,190 @@
-# Guía de Desarrollo Local para SpinHunters App
 
-Esta guía proporciona instrucciones detalladas para configurar y ejecutar la aplicación SpinHunters en un entorno de desarrollo local.
+# Local Development — SpinHunters App (EVA POS compatible)
 
-## Requisitos Previos
+Este documento explica **cómo ejecutar y probar la app en local** usando el **mismo proyecto de Supabase** que utiliza el POS (EVA). Está alineado con la arquitectura actual y con las restricciones de seguridad/roles vigentes.
 
-Antes de comenzar, asegúrate de tener instalado lo siguiente:
+> **Puntos clave**
+>
+> * La app usa **App Router** de Next.js en `app/` (no existe `src/app/`).
+> * Autenticación con **Email + Contraseña** y **Enlace Mágico** (Magic Link).
+>   \- Tras confirmar el email, `/auth/callback` guarda el perfil en `public.users` (upsert) y redirige al Dashboard.
+> * La app **no crea ni modifica membresías**. Solo **lee** desde `public.memberships_view`.
+>   La gestión de membresías se hace en el **POS** (EVA).
 
-- **Node.js v20 o superior**: [Descargar desde nodejs.org](https://nodejs.org/)
-- **pnpm**: Instalar con `npm install -g pnpm`
-- **Git**: [Descargar desde git-scm.com](https://git-scm.com/)
-- **Editor de código**: Recomendamos [Visual Studio Code](https://code.visualstudio.com/)
+---
 
-## Configuración Inicial
+## Requisitos
 
-### 1. Clonar el Repositorio
+* **Node.js** 18 LTS o 20 LTS
+* **pnpm** (recomendado) o npm
+* Acceso al **proyecto Supabase** donde corre el POS (URL y anon key)
+* Un correo para pruebas (usa alias `+test` para no impactar usuarios reales)
 
-```bash
-git clone https://github.com/tu-usuario/spinhunters-app.git
-cd spinhunters-app
+---
+
+## Estructura de archivos
+
+La app vive en `app/` y sigue esta estructura:
+
+```
+app/
+  (marketing)/page.tsx            # Landing SSR
+  (auth)/
+    login/page.tsx                # Login (Contraseña y Magic Link)
+    register/page.tsx             # Registro (Email + Contraseña)
+  auth/callback/route.ts          # Intercambia el código por sesión y hace upsert de perfil
+  dashboard/
+    layout.tsx                    # Requiere sesión (redirige a /login si no hay)
+    page.tsx                      # Panel básico del usuario (Server Component)
+    profile/page.tsx              # Edición de perfil (Client Component)
+  admin/
+    layout.tsx                    # Requiere rol admin (redirige si no lo es)
+    page.tsx                      # Home admin (mock o lectura)
+    users/page.tsx                # Búsqueda de usuarios (solo lectura)
+    users/[id]/page.tsx           # Detalle usuario (solo lectura de membresías)
+  layout.tsx                      # Único RootLayout (tema oscuro, header/footer)
+  globals.css                     # Estilos base (modo oscuro, branding #CA2227)
+middleware.ts                     # Protege /dashboard/*
 ```
 
-### 2. Instalar Dependencias
+---
+
+## Variables de entorno
+
+Crea un archivo **`.env.local`** en la raíz del proyecto con:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=<<TU_URL_SUPABASE>>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<<TU_ANON_KEY>>
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+```
+
+> **No** uses la Service Role Key en la app web.
+> `NEXT_PUBLIC_SITE_URL` debe apuntar a tu host local para construir las URLs de callback.
+
+---
+
+## Configuración en Supabase (una sola vez)
+
+En **Supabase → Authentication → URL Configuration**:
+
+1. Activa **Email confirmations**.
+2. Agrega `http://localhost:3000/auth/callback` en **Redirect URLs**.
+3. (Opcional) Revisa que los correos de confirmación **sí llegan** (usa un email tuyo con alias `+local`).
+
+> Usamos **el mismo** proyecto de Supabase que producción. Tenlo presente para no usar correos reales ni tocar perfiles en uso. Trabaja con emails “dummy” (por ejemplo: `tuemail+local01@dominio.com`).
+
+---
+
+## Instalación y ejecución
 
 ```bash
 pnpm install
-```
-
-### 3. Acceder al Proyecto Supabase Existente
-
-Para el desarrollo local, utilizaremos el mismo proyecto Supabase que se usa en producción:
-
-1. Solicita acceso al proyecto Supabase existente al administrador del sistema
-2. Obtén la URL del proyecto y la clave anónima (anon key) para configurar tus variables de entorno
-
-> **Nota importante**: No es necesario crear un nuevo proyecto Supabase ni ejecutar los scripts SQL, ya que utilizaremos la misma instancia de Supabase que está en producción.
-
-### 4. Configuración de Auth en Supabase
-
-Para que la autenticación funcione correctamente en desarrollo local, asegúrate de que en Supabase → Authentication → URL Configuration estén configurados los siguientes valores:
-
-- **Site URL**: http://localhost:3000
-- **Redirect URLs**: http://localhost:3000 (y cualquier callback que use la app)
-- **Allowed origins (CORS)**: http://localhost:3000
-
-> **Nota**: Esta configuración ya debería estar realizada por el administrador del sistema. Si tienes problemas con la autenticación, verifica estos valores.
-
-### 5. Configurar Variables de Entorno
-
-Para el desarrollo local, necesitas crear un archivo `.env.local` en la raíz del proyecto con las siguientes variables:
-
-```
-NEXT_PUBLIC_SUPABASE_URL=https://<project-id>.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
-# server-only opcional (NO usar en el cliente)
-SUPABASE_SERVICE_ROLE=<service-role>
-APP_BASE_URL=http://localhost:3000
-```
-
-> **Nota importante**: Como estamos usando credenciales de producción, recuerda que las pruebas en local tocan datos reales. Usa usuarios de prueba o emails con alias +test para evitar afectar datos de producción.
-
-## Ejecutar la Aplicación
-
-### Iniciar el Servidor de Desarrollo
-
-```bash
 pnpm dev
+# abre http://localhost:3000
 ```
 
-La aplicación estará disponible en [http://localhost:3000](http://localhost:3000).
+* Si prefieres npm: `npm install && npm run dev`.
 
-## Flujo de Trabajo de Desarrollo
+---
 
-### Estructura de Archivos
+## Flujo de pruebas
 
-La aplicación sigue una estructura basada en el enrutamiento de Next.js 13 con App Router:
+### 1) Registro
 
-- `src/app/(routes)`: Contiene las rutas principales de la aplicación
-  - `login`: Página de inicio de sesión
-  - `register`: Página de registro
-  - `dashboard`: Dashboard del usuario
-  - `admin`: Panel de administración
-- `src/app/auth`: Contiene las rutas de autenticación
-- `src/lib`: Contiene utilidades y clientes
-- `src/types`: Contiene definiciones de tipos TypeScript
+1. Ve a `/register`.
+2. Completa el formulario (Email + Contraseña + metadata: `username`, `gmail`, `discord`, `ggpoker`).
+3. Revisa el correo y confirma el **Enlace Mágico** (confirmación de email).
+4. La app te redirige a **`/auth/callback`**:
 
-### Autenticación
+   * Se establece la sesión (`exchangeCodeForSession`).
+   * Se hace **upsert** del perfil en `public.users` usando `auth_user_id`/`email` y guardando metadata.
+   * Se redirige a **`/dashboard`**.
 
-La aplicación utiliza la autenticación de Supabase con magic links:
+### 2) Login
 
-1. El usuario ingresa su correo electrónico en la página de inicio de sesión o registro
-2. Recibe un enlace por correo electrónico
-3. Al hacer clic en el enlace, se autentica y se redirige al dashboard
+* Ve a `/login`.
+* Pestaña **Contraseña**: `signInWithPassword({ email, password })`.
+* Pestaña **Enlace Mágico**: `signInWithOtp({ email })`.
 
-Para probar la autenticación localmente:
+### 3) Dashboard
 
-1. Configura un servicio de correo electrónico en Supabase (o usa el servicio de prueba incluido)
-2. Registra un usuario con tu correo electrónico
-3. Verifica tu bandeja de entrada para el magic link
-4. Haz clic en el enlace para autenticarte
+* Protegido por **middleware** y por el **layout del dashboard**.
+* Muestra datos del **perfil** (`public.users`) y estado de membresía leyendo **solo** `public.memberships_view` (por `users.id`).
 
-### Desarrollo de Componentes
+### 4) Perfil
 
-Para desarrollar nuevos componentes:
+* `/dashboard/profile` carga el perfil buscando por **`auth_user_id = auth.user.id`** (¡no por `users.id`!).
+* Guarda cambios con `.update(...).eq('id', profile.id)`.
 
-1. Crea el componente en `src/components`
-2. Importa y utiliza el componente en las páginas correspondientes
+### 5) Admin (opcional)
 
-### Estilo y Tema
+* Si tu `auth.user.id` está en `public.admin_users`, podrás acceder a `/admin`.
+* La sección `Admin > Users` permite **buscar** usuarios y ver detalles **en solo lectura**.
+* **No** se crean/actualizan membresías desde la app (se hace en el POS).
 
-La aplicación utiliza Tailwind CSS para los estilos y tiene un tema oscuro con los colores de SpinHunters:
+---
 
-- Negro: Fondo principal
-- Rojo: `#CA2227` para acentos y botones principales
-- Blanco: Texto y elementos de contraste
+## Línea roja: Membresías (solo lectura desde la app)
 
-## Pruebas
+* La app **no** crea ni modifica entradas en `public.memberships`.
+* Todo lo relacionado a **alta/renovación/cancelación** se gestiona **en el POS**.
+* En el Dashboard, la app solo consulta `public.memberships_view` para mostrar el estado (Ultimate activa, fechas, etc.).
 
-### Pruebas Manuales
+---
 
-Para probar manualmente la aplicación:
+## Consejos y resolución de problemas
 
-1. **Registro de Usuario**:
-   - Accede a `/register`
-   - Completa el formulario con datos válidos
-   - Verifica que recibas el magic link por correo electrónico
-   - Haz clic en el enlace y verifica que seas redirigido al dashboard
+### Hidratación / Layout duplicado
 
-2. **Inicio de Sesión**:
-   - Accede a `/login`
-   - Ingresa tu correo electrónico
-   - Verifica que recibas el magic link por correo electrónico
-   - Haz clic en el enlace y verifica que seas redirigido al dashboard
+* Si ves `Hydration failed...` o rutas que colisionan:
 
-3. **Dashboard de Usuario**:
-   - Verifica que puedas ver tu información de perfil
-   - Verifica que puedas ver el estado de tu membresía (si tienes una)
+  * Verifica que **solo existe** el árbol `app/` (no `src/app/`).
+  * Asegúrate de que hay **un único** `app/layout.tsx` y que es el de **tema oscuro** con `globals.css`.
+  * Evita `use client` innecesario en layouts server.
 
-4. **Panel de Administración**:
-   - Accede a `/admin`
-   - Verifica que puedas buscar usuarios por correo electrónico
-   - Verifica que puedas ver y gestionar membresías
+### “not\_authorized” ejecutando funciones en SQL
 
-### Pruebas Automatizadas
+* Las funciones que requieren `auth.uid()` fallarán en la consola SQL si no hay JWT.
+  **No** es un error de la app; prueba esos flows desde la app con sesión iniciada, o simula JWT en SQL (solo para diagnóstico).
 
-Para implementar pruebas automatizadas (pendiente):
+### El Magic Link vuelve a `/` en lugar de `/dashboard`
 
-1. Instala las dependencias de prueba:
-   ```bash
-   pnpm add -D jest @testing-library/react @testing-library/jest-dom
-   ```
+* Revisa que `NEXT_PUBLIC_SITE_URL` **sea** `http://localhost:3000`.
+* Revisa que `Authentication → URL Configuration → Redirect URLs` incluya `http://localhost:3000/auth/callback`.
 
-2. Configura Jest en `jest.config.js`
+### No soy admin pero necesito entrar en `/admin`
 
-3. Escribe pruebas en archivos con extensión `.test.tsx` o `.spec.tsx`
+* Pide que añadan tu `auth.user.id` a `public.admin_users` en Supabase.
+* La app solo **lee** `admin_users` (no lo modifica).
 
-4. Ejecuta las pruebas:
-   ```bash
-   pnpm test
-   ```
+### Estilos inconsistentes
 
-## Solución de Problemas
+* Usa las utilidades de `globals.css`: `.btn`, `.btn-primary`, `.card`, `.heading`, `.muted`, etc.
+* Evita clases “light” (ej. `bg-white`, `text-gray-*`) y usa el tema oscuro (branding `#CA2227`).
 
-### Problemas Comunes
+---
 
-#### Error de Conexión a Supabase
+## Buenas prácticas
 
-**Síntoma**: La aplicación no puede conectarse a Supabase.
+* **Commits** atómicos y descriptivos: `feat(auth): add password tab`, `fix(profile): query by auth_user_id`, etc.
+* **No** incluir claves sensibles en commits. `.env.local` está en `.gitignore`.
+* **No** añadir SQL a la app. Los cambios de base de datos se gestionan por archivos `sql/` y los ejecuta el responsable (DBA/owner).
 
-**Solución**:
-1. Verifica que las variables de entorno estén configuradas correctamente
-2. Asegúrate de que el proyecto de Supabase esté activo
-3. Verifica que las claves de API sean correctas
+---
 
-#### Error de Autenticación
+## Qué no hace la app (a propósito)
 
-**Síntoma**: No puedes iniciar sesión o registrarte.
+* **No** gestiona pagos ni métodos de pago.
+* **No** crea ni anula membresías.
+* **No** muestra movimientos del **ledger** (solo admin en POS).
 
-**Solución**:
-1. Verifica que el servicio de correo electrónico de Supabase esté configurado correctamente
-2. Revisa los registros de Supabase para ver si hay errores
-3. Asegúrate de que la URL de redirección en la configuración de autenticación sea correcta
+---
 
-#### Problemas con Tailwind CSS
+## Resumen
 
-**Síntoma**: Los estilos no se aplican correctamente.
+* Corre `pnpm dev`, regístrate, confirma email, revisa el Dashboard.
+* El perfil se guarda en `public.users` y las membresías se **leen** desde `memberships_view`.
+* `/admin` requiere que tu usuario esté en `public.admin_users`.
 
-**Solución**:
-1. Ejecuta `pnpm build` para regenerar los estilos
-2. Verifica que las clases de Tailwind estén escritas correctamente
-3. Asegúrate de que `globals.css` esté importado en `layout.tsx`
-
-## Recursos Adicionales
-
-- [Documentación de Next.js](https://nextjs.org/docs)
-- [Documentación de Supabase](https://supabase.com/docs)
-- [Documentación de Tailwind CSS](https://tailwindcss.com/docs)
-- [Documentación de TypeScript](https://www.typescriptlang.org/docs)
-
-## Contribución
-
-Para contribuir al proyecto:
-
-1. Crea una rama para tu característica o corrección:
-   ```bash
-   git checkout -b feature/nombre-de-la-caracteristica
-   ```
-
-2. Realiza tus cambios y haz commit:
-   ```bash
-   git commit -m "Descripción de los cambios"
-   ```
-
-3. Envía tus cambios al repositorio:
-   ```bash
-   git push origin feature/nombre-de-la-caracteristica
-   ```
-
-4. Crea un Pull Request en GitHub
+Si algo no cuadra con estos pasos, revisa primero **variables de entorno**, **redirects en Supabase** y que **no existan dos árboles de rutas**. Luego, abre un issue con el mensaje exacto del error y el paso donde ocurrió.

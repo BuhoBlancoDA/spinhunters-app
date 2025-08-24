@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { --bg: 0 0% 0%; --fg: 0 0% 100%; }
+
+html, body { height: 100%; }
+body { @apply bg-black text-white antialiased; }
+
+@layer components {
+  .btn{ @apply inline-flex items-center justify-center rounded-xl px-4 py-2 font-medium transition; }
+  .btn-primary{ @apply btn bg-brand text-white hover:bg-brand-700 shadow-brand; }
+  .btn-ghost{ @apply btn bg-transparent text-white/80 hover:text-white hover:bg-white/5; }
+  .card{ @apply rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 shadow-soft; }
+  .muted{ @apply text-white/60; }
+  .heading{ @apply text-4xl md:text-5xl font-extrabold tracking-tight; }
+  .subheading{ @apply text-lg md:text-xl text-white/70; }
+}
+
+/* links por defecto */
+a { @apply text-white no-underline; }
+a:hover { @apply underline decoration-white/40; }

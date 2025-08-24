@@ -1,89 +1,29 @@
-# Supabase Security Policies
+# Documentación de SpinHunters App
 
-This document explains the Row Level Security (RLS) policies used in the SpinHunters POS application and the differences between development and production environments.
+Este directorio contiene la documentación oficial para la aplicación web SpinHunters. A continuación se presenta una descripción de cada documento disponible.
 
-## Row Level Security (RLS)
+## Índice de Documentos
 
-Row Level Security (RLS) is a feature in PostgreSQL that allows you to restrict which rows a user can access in a table. This is important for multi-tenant applications where different users should only see their own data.
+### Arquitectura y Estructura
 
-In Supabase, RLS is enabled by default for all tables, and you need to create policies to allow access to the data.
+- [**APP_ARCHITECTURE.md**](./APP_ARCHITECTURE.md) - Describe la arquitectura de la aplicación, la estructura de directorios, las responsabilidades de cada ruta y el flujo de autenticación.
 
-## Development vs Production Policies
+### Base de Datos y Supabase
 
-### Development Environment
+- [**DATABASE.md**](./DATABASE.md) - Documentación detallada sobre la estructura de la base de datos, incluyendo tablas, vistas, relaciones, funciones y triggers.
+- [**SUPABASE_MAPPINGS.md**](./SUPABASE_MAPPINGS.md) - Explica los mapeos entre las tablas de autenticación y las tablas de la aplicación en Supabase.
+- [**SECURITY_POLICIES.md**](./SECURITY_POLICIES.md) - Describe las políticas de seguridad (Row Level Security) utilizadas en la aplicación.
+- [**POS_COMPATIBILITY.md**](./POS_COMPATIBILITY.md) - Explica las consideraciones de compatibilidad entre la aplicación web y el sistema POS existente.
 
-In development environments, you might want to use more permissive policies to facilitate testing and debugging:
+### Desarrollo y Despliegue
 
-```sql
--- Example of a permissive policy for development
-create policy "Allow users CRUD for authenticated"
-on public.users
-for all
-to authenticated
-using (true)
-with check (true);
-```
+- [**LOCAL_DEVELOPMENT.md**](./LOCAL_DEVELOPMENT.md) - Guía para configurar y ejecutar la aplicación en un entorno de desarrollo local.
+- [**PRODUCTION_DEPLOYMENT.md**](./PRODUCTION_DEPLOYMENT.md) - Instrucciones detalladas para desplegar la aplicación en un entorno de producción utilizando Vercel y Supabase.
 
-This policy allows any authenticated user to perform all operations (SELECT, INSERT, UPDATE, DELETE) on the users table.
+## Notas Importantes
 
-For even more permissive access during local development, you could allow anonymous access:
+1. **Gestión de Membresías**: La aplicación web **no crea ni modifica membresías**. Solo lee datos de `public.memberships_view`. La creación y modificación de membresías se realiza exclusivamente desde el sistema POS.
 
-```sql
--- NOT RECOMMENDED for production
-create policy "Allow users CRUD for anon"
-on public.users
-for all
-to anon
-using (true)
-with check (true);
-```
+2. **Integración con POS**: La aplicación web comparte la misma base de datos Supabase que el sistema POS. Es importante mantener la compatibilidad entre ambos sistemas.
 
-### Production Environment
-
-In production environments, you should use more restrictive policies to ensure data security:
-
-```sql
--- Example of a restrictive policy for production
-create policy "Allow users to select their own data"
-on public.users
-for select
-to authenticated
-using (auth.uid() = id);
-
-create policy "Allow users to insert their own data"
-on public.users
-for insert
-to authenticated
-with check (auth.uid() = id);
-
-create policy "Allow users to update their own data"
-on public.users
-for update
-to authenticated
-using (auth.uid() = id)
-with check (auth.uid() = id);
-```
-
-These policies ensure that users can only access, modify, or delete their own data.
-
-## Current Implementation
-
-The current implementation uses restrictive policies that follow the principle of least privilege:
-
-1. Users can only read and update their own data in the `users` table, and can only insert their own profile with `id = auth.uid()`.
-2. Users can only read their own memberships in the `memberships` table.
-3. Only administrators (determined by the `admin_users` table and `is_admin()` function) can create, update, or delete memberships.
-4. All authenticated users can read payment methods, but only administrators can create, update, or delete them.
-5. Users can only read their own ledger entries, and only administrators can create, update, or delete ledger entries.
-
-These policies ensure that users can only access their own data and cannot perform operations that should be restricted to administrators.
-
-The SQL migration file `supabase/sql/03_schema_alignment.sql` contains the current RLS policies.
-
-## Best Practices
-
-1. **Never** open tables to anonymous users in production
-2. Always use the principle of least privilege - grant only the permissions that are absolutely necessary
-3. Test your policies thoroughly to ensure they work as expected
-4. Consider using different policies for different roles (e.g., admin, user, etc.)
-5. Regularly review and update your policies as your application evolves
+3. **Autenticación**: La aplicación utiliza Supabase Auth para la autenticación de usuarios. Los usuarios pueden registrarse con email y contraseña o utilizar enlaces mágicos enviados por email.
