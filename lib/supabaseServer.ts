@@ -1,13 +1,16 @@
-// lib/supabaseServer.ts
+// src/lib/supabaseServer.ts
 import { cookies } from 'next/headers'
-import { createServerClient } from '@supabase/auth-helpers-nextjs'
-import type { Database } from '@/types/supabase'
+import {
+  createServerComponentClient,
+  createRouteHandlerClient,
+} from '@supabase/auth-helpers-nextjs'
+// Si tienes tipos generados por Supabase, descomenta y añade <Database>:
+// import type { Database } from '@/types/supabase'
 
-export function createServerSupabase() {
-  const cookieStore = cookies()
-  return createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get: (name) => cookieStore.get(name)?.value } }
-  )
-}
+// Client para Server Components (RSC)
+export const createServerSupabase = () =>
+  createServerComponentClient/*<Database>*/({ cookies })
+
+// Client para Route Handlers (app/**/route.ts)
+export const createRouteSupabase = () =>
+  createRouteHandlerClient/*<Database>*/({ cookies })

@@ -1,7 +1,13 @@
+// app/dashboard/page.tsx
+import { redirect } from 'next/navigation'
 import { createServerSupabase } from '@/lib/supabaseServer'
 
 export default async function Dashboard() {
   const supabase = createServerSupabase()
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) redirect('/login?next=/dashboard')
+
+  // A partir de aquí, tu código actual:
   const { data: { user } } = await supabase.auth.getUser()
   const { data: me } = await supabase
     .from('users')

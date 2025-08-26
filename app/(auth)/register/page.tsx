@@ -35,7 +35,7 @@ export default function Register() {
       email: form.email,
       password: form.password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
         data: {
           username: form.username,
           gmail: form.gmail,
